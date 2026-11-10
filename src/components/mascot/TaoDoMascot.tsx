@@ -20,6 +20,9 @@ export const TaoDoMascot: React.FC<TaoDoMascotProps> = ({
   className = '',
 }) => {
   const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
+  // null = đang kiểm tra; false = máy không có giọng tiếng Việt
+  const [hasViVoice, setHasViVoice] = React.useState<boolean | null>(narrator.hasVietnameseVoice);
+  React.useEffect(() => narrator.onVoiceStatus(setHasViVoice), []);
 
   const handlePlayVoice = () => {
     sound.playClick();
@@ -102,6 +105,12 @@ export const TaoDoMascot: React.FC<TaoDoMascotProps> = ({
           <p>{transcript}</p>
         </div>
 
+        {hasViVoice === false && (
+          <p className="text-[11px] sm:text-xs font-bold text-amber-800 bg-amber-100 border border-amber-200 rounded-xl px-2 py-1">
+            Máy này chưa có giọng đọc tiếng Việt nên Táo Đỏ chưa đọc được. Em đọc phụ đề ở trên, hoặc mở bài bằng trình duyệt Microsoft Edge để nghe giọng tiếng Việt nhé.
+          </p>
+        )}
+
         {/* Thanh điều khiển lời thoại */}
         <div className="flex items-center gap-2 self-start">
           <button
@@ -115,7 +124,7 @@ export const TaoDoMascot: React.FC<TaoDoMascotProps> = ({
             title="Bấm để nghe Táo Đỏ thuyết minh giọng đọc"
           >
             <Volume2 className="w-3.5 h-3.5" />
-            <span>{isPlaying ? 'Đang đọc...' : '🔊 Nghe Táo Đỏ đọc'}</span>
+            <span>{isPlaying ? 'Đang đọc...' : 'Nghe Táo Đỏ đọc'}</span>
           </button>
 
           <button
