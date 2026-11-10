@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Award, CheckCircle2, AlertCircle, BookmarkCheck } from 'lucide-react';
+import { RotateCcw, Award, CheckCircle2, AlertCircle, BookmarkCheck, Users, HelpCircle } from 'lucide-react';
 import { sound } from '../utils/audio.ts';
+import { GroupInfo } from '../types/classroom.ts';
 
 export interface AnswerRecord {
   stage: string;
   questionText: string;
   isCorrect: boolean;
+  classCorrect?: number;
+  classSize?: number;
 }
 
 interface SummaryTabProps {
-  scoreBlue: number;
-  scoreOrange: number;
+  groups: GroupInfo[];
   answerRecords: AnswerRecord[];
+  classSize?: number;
+  calledCount?: number;
   onResetAll: () => void;
   onTriggerConfetti: () => void;
 }
 
 export const SummaryTab: React.FC<SummaryTabProps> = ({
-  scoreBlue,
-  scoreOrange,
+  groups,
   answerRecords,
+  classSize = 35,
+  calledCount = 0,
   onResetAll,
   onTriggerConfetti,
 }) => {
@@ -31,19 +36,25 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
     sound.playCorrect();
   }, [onTriggerConfetti]);
 
-  // Xác định đội chiến thắng
-  const isBlueWin = scoreBlue > scoreOrange;
-  const isOrangeWin = scoreOrange > scoreBlue;
-  const isTie = scoreBlue === scoreOrange;
+  // Xếp hạng các nhóm từ điểm cao đến thấp
+  const sortedGroups = [...groups].sort((a, b) => b.score - a.score);
+  const highestScore = sortedGroups[0]?.score ?? 0;
+  const topGroups = sortedGroups.filter((g) => g.score === highestScore);
+  const isTie = topGroups.length === sortedGroups.length && sortedGroups.length > 1;
 
-  // Thống kê theo chặng cho giáo viên
-  const stage2Records = answerRecords.filter((r) => r.stage.includes('Chặng 2'));
-  const stage3Records = answerRecords.filter((r) => r.stage.includes('Chặng 3'));
-
-  const stage2Correct = stage2Records.filter((r) => r.isCorrect).length;
-  const stage3Correct = stage3Records.filter((r) => r.isCorrect).length;
-
-  const missedQuestions = answerRecords.filter((r) => !r.isCorrect);
+  // Tính trung bình tỉ lệ cả lớp trả lời đúng
+  const recordsWithClassCount = answerRecords.filter((r) => r.classCorrect !== undefined);
+  const totalClassPercent =
+    recordsWithClassCount.length > 0
+      ? Math.round(
+          recordsWithClassCount.reduce((sum, r) => {
+            const sz = r.classSize || classSize;
+            return sum + (r.classCorrect || 0) / sz;
+          }, 0) /
+            recordsWithClassCount.length *
+            100
+        )
+      : null;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-3 sm:px-6 py-4 flex flex-col gap-6 items-center">
@@ -53,93 +64,77 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
           🏆
         </div>
         <h2 className="font-display font-black text-2xl sm:text-4xl text-amber-950">
-          {isBlueWin && 'Chúc Mừng Đội Xanh Thắng Cuộc!'}
-          {isOrangeWin && 'Chúc Mừng Đội Cam Thắng Cuộc!'}
-          {isTie && 'Hai Đội Hòa Nhau – Cả Lớp Đều Quá Xuất Sắc!'}
+          {isTie
+            ? 'Các nhóm hòa nhau – Cả lớp đều quá xuất sắc!'
+            : `Chúc mừng ${topGroups.map((g) => g.name).join(' & ')} cao điểm nhất!`}
         </h2>
         <p className="text-sm sm:text-base font-bold text-amber-900 max-w-xl">
           Các em đã cùng nhau khám phá, thực hành và giải quyết các bài toán chia có dư rất tự tin và sôi nổi!
         </p>
       </div>
 
-      {/* 2 THẺ ĐIỂM SỐ LỚN THEO MÀU ĐỘI */}
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Thẻ Đội Xanh */}
-        <div
-          className={`rounded-3xl p-6 border-3 transition-all flex flex-col items-center justify-between gap-4 ${
-            isBlueWin
-              ? 'bg-blue-50 border-[#2F80D0] shadow-lg ring-4 ring-blue-200'
-              : 'bg-white border-blue-200 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded-full bg-[#2F80D0]" />
-            <h3 className="font-display font-black text-2xl text-blue-900">
-              Đội Xanh
-            </h3>
-            {isBlueWin && <Award className="w-6 h-6 text-[#2F80D0]" />}
-          </div>
-
-          <div className="font-display font-black text-6xl sm:text-7xl text-[#2F80D0] tracking-tight">
-            {scoreBlue}
-            <span className="text-xl sm:text-2xl font-bold text-slate-500 ml-1.5">
-              điểm
-            </span>
-          </div>
-
-          {/* Dãy sao ⭐ */}
-          <div className="flex items-center gap-1.5 flex-wrap justify-center min-h-8">
-            {scoreBlue > 0 ? (
-              Array.from({ length: Math.min(scoreBlue, 7) }).map((_, i) => (
-                <span key={i} className="text-2xl drop-shadow-sm animate-pulse">
-                  ⭐
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-slate-400 font-bold">
-                Cùng cố gắng ở lượt sau nhé!
-              </span>
-            )}
-          </div>
+      {/* THẺ ĐIỂM SỐ CÁC NHÓM XẾP HẠNG TỪ CAO ĐẾN THẤP */}
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h3 className="font-display font-black text-lg text-slate-800 flex items-center gap-2">
+            <span>🏅 Bảng xếp hạng các nhóm thi đua ({sortedGroups.length} nhóm)</span>
+          </h3>
+          <span className="text-xs text-slate-500 font-semibold">
+            Xếp hạng theo điểm số
+          </span>
         </div>
 
-        {/* Thẻ Đội Cam */}
-        <div
-          className={`rounded-3xl p-6 border-3 transition-all flex flex-col items-center justify-between gap-4 ${
-            isOrangeWin
-              ? 'bg-orange-50 border-[#F07B12] shadow-lg ring-4 ring-orange-200'
-              : 'bg-white border-orange-200 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded-full bg-[#F07B12]" />
-            <h3 className="font-display font-black text-2xl text-orange-900">
-              Đội Cam
-            </h3>
-            {isOrangeWin && <Award className="w-6 h-6 text-[#F07B12]" />}
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {sortedGroups.map((group, rankIdx) => {
+            const isWinner = topGroups.some((g) => g.id === group.id);
+            const rankMedal = rankIdx === 0 ? '🥇' : rankIdx === 1 ? '🥈' : rankIdx === 2 ? '🥉' : `#${rankIdx + 1}`;
 
-          <div className="font-display font-black text-6xl sm:text-7xl text-[#F07B12] tracking-tight">
-            {scoreOrange}
-            <span className="text-xl sm:text-2xl font-bold text-slate-500 ml-1.5">
-              điểm
-            </span>
-          </div>
+            return (
+              <div
+                key={group.id}
+                className={`rounded-3xl p-5 border-3 transition-all flex flex-col items-center justify-between gap-3 ${
+                  isWinner
+                    ? 'bg-amber-50/80 border-amber-400 shadow-md ring-4 ring-amber-200 scale-102'
+                    : 'bg-white border-slate-200 shadow-sm'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xl font-bold">{rankMedal}</span>
+                  <div className="flex items-center gap-1.5 font-display font-black text-lg text-slate-800">
+                    <span
+                      className="w-3.5 h-3.5 rounded-full"
+                      style={{ backgroundColor: group.colorHex }}
+                    />
+                    <span>{group.name}</span>
+                  </div>
+                  {isWinner ? <Award className="w-5 h-5 text-amber-600" /> : <div className="w-5" />}
+                </div>
 
-          {/* Dãy sao ⭐ */}
-          <div className="flex items-center gap-1.5 flex-wrap justify-center min-h-8">
-            {scoreOrange > 0 ? (
-              Array.from({ length: Math.min(scoreOrange, 7) }).map((_, i) => (
-                <span key={i} className="text-2xl drop-shadow-sm animate-pulse">
-                  ⭐
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-slate-400 font-bold">
-                Cùng cố gắng ở lượt sau nhé!
-              </span>
-            )}
-          </div>
+                <div
+                  className="font-display font-black text-5xl sm:text-6xl tracking-tight"
+                  style={{ color: group.colorHex }}
+                >
+                  {group.score}
+                  <span className="text-lg font-bold text-slate-500 ml-1">đ</span>
+                </div>
+
+                {/* Dãy sao ⭐ */}
+                <div className="flex items-center gap-1 flex-wrap justify-center min-h-7">
+                  {group.score > 0 ? (
+                    Array.from({ length: Math.min(group.score, 7) }).map((_, i) => (
+                      <span key={i} className="text-xl drop-shadow-xs animate-pulse">
+                        ⭐
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 font-bold">
+                      Cố gắng ở lượt sau nhé!
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -189,72 +184,89 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
         </div>
       </div>
 
-      {/* BẢNG THỐNG KÊ CHO GIÁO VIÊN */}
+      {/* BẢNG THỐNG KÊ CHO GIÁO VIÊN (KÈM CỘT TỈ LỆ CẢ LỚP ĐÚNG) */}
       <div className="w-full bg-white rounded-3xl p-6 border-2 border-[#F0DCC0] shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-          <h3 className="font-display font-bold text-lg text-slate-800 flex items-center gap-2">
-            <span>📊 Bảng thống kê dành cho Giáo viên</span>
-          </h3>
-          <span className="text-xs text-slate-500 font-semibold">
-            Theo dõi mức độ hoàn thành bài học
-          </span>
-        </div>
-
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-amber-50 font-display font-bold text-slate-800 border-b border-amber-200">
-              <tr>
-                <th className="py-2.5 px-3">Chặng học tập</th>
-                <th className="py-2.5 px-3">Số câu đã làm</th>
-                <th className="py-2.5 px-3">Trả lời đúng</th>
-                <th className="py-2.5 px-3">Tỉ lệ đúng</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              <tr>
-                <td className="py-2.5 px-3 font-semibold">Chặng 2: Hết hay dư?</td>
-                <td className="py-2.5 px-3">{stage2Records.length} / 8 câu</td>
-                <td className="py-2.5 px-3 font-bold text-emerald-700">{stage2Correct} câu</td>
-                <td className="py-2.5 px-3 font-bold">
-                  {stage2Records.length > 0
-                    ? `${Math.round((stage2Correct / stage2Records.length) * 100)}%`
-                    : 'Chưa làm'}
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold">Chặng 3: Vận dụng thử thách</td>
-                <td className="py-2.5 px-3">{stage3Records.length} / 6 câu</td>
-                <td className="py-2.5 px-3 font-bold text-emerald-700">{stage3Correct} câu</td>
-                <td className="py-2.5 px-3 font-bold">
-                  {stage3Records.length > 0
-                    ? `${Math.round((stage3Correct / stage3Records.length) * 100)}%`
-                    : 'Chưa làm'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Các câu cần lưu ý / nhiều bạn trả lời sai */}
-        {missedQuestions.length > 0 ? (
-          <div className="bg-red-50/70 p-3.5 rounded-2xl border border-red-200 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-red-800">
-              <AlertCircle className="w-4 h-4 text-[#E2463B]" />
-              <span>Các câu hỏi học sinh cần được củng cố lại:</span>
-            </div>
-            <ul className="list-disc list-inside text-xs sm:text-sm text-slate-700 space-y-1 pl-1">
-              {missedQuestions.map((q, idx) => (
-                <li key={idx}>
-                  <span className="font-semibold">{q.stage}:</span>{' '}
-                  <span className="italic">{q.questionText}</span>
-                </li>
-              ))}
-            </ul>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+          <div>
+            <h3 className="font-display font-bold text-lg text-slate-800 flex items-center gap-2">
+              <span>📊 Bảng thống kê kết quả học tập của cả lớp</span>
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold">
+              Chi tiết câu hỏi và tỉ lệ học sinh trả lời đúng
+            </p>
           </div>
+
+          {/* DÒNG TÓM TẮT: TRUNG BÌNH CẢ LỚP & ĐÃ GỌI BẠN LÊN BẤM */}
+          <div className="flex flex-wrap items-center gap-2">
+            {totalClassPercent !== null && (
+              <span className="text-xs font-display font-extrabold bg-blue-50 text-blue-900 px-3 py-1 rounded-xl border border-blue-200">
+                Trung bình cả lớp đúng: <strong>{totalClassPercent}%</strong>
+              </span>
+            )}
+            <span className="text-xs font-display font-extrabold bg-amber-50 text-amber-900 px-3 py-1 rounded-xl border border-amber-200">
+              Đã gọi: <strong>{calledCount} / {classSize} bạn</strong>
+            </span>
+          </div>
+        </div>
+
+        {answerRecords.length === 0 ? (
+          <p className="text-center text-xs text-slate-400 italic py-4">
+            Chưa có câu hỏi nào được hoàn thành ở chặng Luyện tập và Thử thách.
+          </p>
         ) : (
-          <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-xs sm:text-sm font-bold text-emerald-800 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#3F9B4A]" />
-            <span>Xuất sắc! Tất cả các câu hỏi đã làm đều được trả lời chính xác!</span>
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-amber-50 font-display font-bold text-slate-800 border-b border-amber-200">
+                <tr>
+                  <th className="py-2.5 px-3">STT</th>
+                  <th className="py-2.5 px-3">Chặng học</th>
+                  <th className="py-2.5 px-3">Phép tính / Câu hỏi</th>
+                  <th className="py-2.5 px-3">Đại diện</th>
+                  <th className="py-2.5 px-3">Tỉ lệ cả lớp đúng</th>
+                  <th className="py-2.5 px-3">Đánh giá</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {answerRecords.map((r, idx) => {
+                  const size = r.classSize || classSize;
+                  const count = r.classCorrect ?? (r.isCorrect ? size : 0);
+                  const pct = Math.round((count / size) * 100);
+                  const isLow = pct < 50;
+
+                  return (
+                    <tr
+                      key={idx}
+                      className={isLow ? 'bg-red-50/60 font-semibold' : 'hover:bg-slate-50 font-medium'}
+                    >
+                      <td className="py-2.5 px-3 text-slate-500 font-bold">{idx + 1}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-700">{r.stage}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{r.questionText}</td>
+                      <td className="py-2.5 px-3">
+                        {r.isCorrect ? (
+                          <span className="text-[#3F9B4A] font-bold">✔ Đúng</span>
+                        ) : (
+                          <span className="text-[#E2463B] font-bold">✗ Sai</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 font-display font-black text-sm">
+                        {count} / {size} bạn ({pct}%)
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {isLow ? (
+                          <span className="text-[11px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full border border-red-300">
+                            Cần củng cố
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300">
+                            Đạt chuẩn
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

@@ -1,8 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Check, X, ArrowRight, Sparkles } from 'lucide-react';
-import { Team } from './Header.tsx';
 import { sound } from '../utils/audio.ts';
 import { TabId } from './TabNav.tsx';
+import { GroupInfo } from '../types/classroom.ts';
+import { QuestionStepBanner, QuestionStage } from './classroom/QuestionStepBanner.tsx';
+import { ClassCorrectCounter } from './classroom/ClassCorrectCounter.tsx';
+import { StudentCaller } from './classroom/StudentCaller.tsx';
 
 interface Question {
   id: string;
@@ -66,37 +69,63 @@ export function generatePracticeQuestions(): Question[] {
 }
 
 interface PracticeTabProps {
-  currentTeam: Team;
-  onScoreTeam: (team: Team, points: number) => void;
-  onNextTeam: () => void;
+  groups: GroupInfo[];
+  activeGroupId: string;
+  onScoreGroup: (groupId: string, points: number) => void;
+  onNextGroup: () => void;
   onGoToTab: (tab: TabId) => void;
   onTriggerConfetti: () => void;
-  onRecordAnswer: (stage: string, questionText: string, isCorrect: boolean) => void;
+  onRecordAnswer: (stage: string, questionText: string, isCorrect: boolean, classCorrect?: number, classSize?: number) => void;
   questions: Question[];
   onResetQuestions: () => void;
+  classSize?: number;
+  enableCountdown?: boolean;
+  countdownDuration?: 5 | 10 | 15;
+  calledStudents?: number[];
+  onCallStudent?: (num: number) => void;
+  onSkipStudent?: (num: number) => void;
 }
 
 export const PracticeTab: React.FC<PracticeTabProps> = ({
-  currentTeam,
-  onScoreTeam,
-  onNextTeam,
+  groups,
+  activeGroupId,
+  onScoreGroup,
+  onNextGroup,
   onGoToTab,
   onTriggerConfetti,
   onRecordAnswer,
   questions,
+  classSize = 35,
+  enableCountdown = true,
+  countdownDuration = 10,
+  calledStudents = [],
+  onCallStudent = () => {},
+  onSkipStudent = () => {},
 }) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [userChoice, setUserChoice] = useState<'exact' | 'remainder' | null>(null);
   const [results, setResults] = useState<(boolean | null)[]>(new Array(8).fill(null));
-  const [isAnswered, setIsAnswered] = useState<boolean>(false);
+
+  // 3 bước câu hỏi: 'countdown' | 'answering' | 'results'
+  const [questionStage, setQuestionStage] = useState<QuestionStage>(
+    enableCountdown ? 'countdown' : 'answering'
+  );
+  const [classCorrectCount, setClassCorrectCount] = useState<number>(classSize);
+
+  const activeGroup = useMemo(
+    () => groups.find((g) => g.id === activeGroupId) || groups[0],
+    [groups, activeGroupId]
+  );
 
   const currentQ = useMemo(() => questions[currentIndex] || questions[0], [questions, currentIndex]);
 
+  const isButtonsLocked = questionStage === 'countdown';
+
   const handleSelectChoice = (choice: 'exact' | 'remainder') => {
-    if (isAnswered) return;
+    if (questionStage !== 'answering') return;
 
     setUserChoice(choice);
-    setIsAnswered(true);
+    setQuestionStage('results');
 
     const isCorrect = (choice === 'exact' && currentQ.isExact) || (choice === 'remainder' && !currentQ.isExact);
 
@@ -104,13 +133,10 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
     newResults[currentIndex] = isCorrect;
     setResults(newResults);
 
-    const questionText = `${currentQ.dividend} : ${currentQ.divisor}`;
-    onRecordAnswer('Chặng 2: Hết hay dư', questionText, isCorrect);
-
     if (isCorrect) {
       sound.playCorrect();
       onTriggerConfetti();
-      onScoreTeam(currentTeam, 1);
+      onScoreGroup(activeGroup.id, 1);
     } else {
       sound.playIncorrect();
     }
@@ -118,23 +144,27 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
 
   const handleNextQuestion = () => {
     sound.playClick();
+    const questionText = `${currentQ.dividend} : ${currentQ.divisor}`;
+    const isCorrect = results[currentIndex] === true;
+
+    // Ghi nhận cả kết quả đại diện và số bạn dưới lớp đúng
+    onRecordAnswer('Chặng 2: Hết hay dư', questionText, isCorrect, classCorrectCount, classSize);
+
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setUserChoice(null);
-      setIsAnswered(false);
-      onNextTeam(); // Tự đổi lượt sang đội kia
+      setQuestionStage(enableCountdown ? 'countdown' : 'answering');
+      setClassCorrectCount(classSize);
+      onNextGroup(); // Tự đổi lượt sang nhóm tiếp theo (vòng tròn)
     } else {
-      // Hết 8 câu, chuyển sang Chặng 3
       onGoToTab('challenge');
     }
   };
 
-  const isCurrentCorrect =
-    userChoice &&
-    ((userChoice === 'exact' && currentQ.isExact) || (userChoice === 'remainder' && !currentQ.isExact));
+  const isCurrentCorrect = results[currentIndex] === true;
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 flex flex-col gap-5 items-center">
+    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 flex flex-col gap-4 items-center">
       {/* TIẾN TRÌNH 8 CÂU */}
       <div className="w-full bg-white rounded-2xl p-4 border-2 border-[#F0DCC0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -155,9 +185,7 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
               <div
                 key={q.id}
                 className={`w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-xs transition-all ${
-                  isCur
-                    ? 'ring-4 ring-orange-300 scale-110 font-black'
-                    : ''
+                  isCur ? 'ring-4 ring-orange-300 scale-110 font-black' : ''
                 } ${
                   res === true
                     ? 'bg-[#3F9B4A] text-white shadow-xs'
@@ -173,29 +201,45 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
         </div>
       </div>
 
+      {/* DẢI 3 BƯỚC: ① CẢ LỚP TRẢ LỜI ➔ ② ĐẠI DIỆN LÊN BẤM ➔ ③ XEM KẾT QUẢ */}
+      <QuestionStepBanner
+        stage={questionStage}
+        enableCountdown={enableCountdown}
+        countdownSeconds={countdownDuration}
+        onCountdownFinish={() => setQuestionStage('answering')}
+        onSkipCountdown={() => setQuestionStage('answering')}
+      />
+
       {/* THẺ BÀI CHÍNH */}
-      <div className="w-full bg-white rounded-3xl p-6 sm:p-8 border-2 border-[#F0DCC0] shadow-md flex flex-col items-center gap-6">
-        {/* Nhãn lượt đội đang chơi */}
-        <div
-          className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-display font-black text-sm sm:text-base border-2 shadow-xs transition-all ${
-            currentTeam === 'blue'
-              ? 'bg-blue-50 border-[#2F80D0] text-[#2F80D0]'
-              : 'bg-orange-50 border-[#F07B12] text-[#F07B12]'
-          }`}
-        >
-          <span
-            className={`w-3 h-3 rounded-full ${
-              currentTeam === 'blue' ? 'bg-[#2F80D0]' : 'bg-[#F07B12]'
-            }`}
+      <div className="w-full bg-white rounded-3xl p-5 sm:p-7 border-2 border-[#F0DCC0] shadow-md flex flex-col items-center gap-5">
+        {/* Nhãn lượt đội đang chơi + Nút chọn bạn lên bấm */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full font-display font-black text-sm sm:text-base border-2 shadow-xs transition-all bg-white"
+            style={{
+              borderColor: activeGroup.colorHex,
+              color: activeGroup.colorHex,
+            }}
+          >
+            <span
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: activeGroup.colorHex }}
+            />
+            <span>Lượt của {activeGroup.name}</span>
+            <Sparkles className="w-4 h-4" />
+          </div>
+
+          {/* NÚT CHỌN BẠN LÊN BẤM */}
+          <StudentCaller
+            classSize={classSize}
+            calledStudents={calledStudents}
+            onCallStudent={onCallStudent}
+            onSkipStudent={onSkipStudent}
           />
-          <span>
-            Lượt của {currentTeam === 'blue' ? 'Đội Xanh' : 'Đội Cam'}
-          </span>
-          <Sparkles className="w-4 h-4" />
         </div>
 
         {/* THẺ LỚN VIỀN NÉT ĐỨT HIỂN THỊ PHÉP TÍNH KHỔNG LỒ */}
-        <div className="w-full max-w-lg py-8 px-6 rounded-3xl border-4 border-dashed border-[#F39A1E]/60 bg-[#FFFDF8] flex items-center justify-center shadow-inner">
+        <div className="w-full max-w-lg py-7 px-6 rounded-3xl border-4 border-dashed border-[#F39A1E]/60 bg-[#FFFDF8] flex items-center justify-center shadow-inner">
           <div className="font-display font-black text-5xl sm:text-7xl text-slate-800 tracking-wider select-none text-center">
             {currentQ.dividend} : {currentQ.divisor} = ?
           </div>
@@ -205,15 +249,17 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
         <div className="w-full max-w-lg grid grid-cols-2 gap-4">
           <button
             type="button"
-            disabled={isAnswered}
+            disabled={isButtonsLocked || questionStage === 'results'}
             onClick={() => handleSelectChoice('exact')}
             className={`py-5 px-4 rounded-2xl font-display font-black text-lg sm:text-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 btn-press ${
-              isAnswered && userChoice === 'exact'
+              questionStage === 'results' && userChoice === 'exact'
                 ? currentQ.isExact
                   ? 'bg-[#3F9B4A] text-white shadow-[0_4px_0_#2C7535] scale-102 ring-4 ring-emerald-300'
                   : 'bg-[#E2463B] text-white shadow-[0_4px_0_#A81D14] ring-4 ring-red-300'
+                : isButtonsLocked
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                 : 'bg-[#3F9B4A] hover:bg-[#32853b] text-white shadow-[0_6px_0_#2C7535] active:translate-y-1 active:shadow-none'
-            } disabled:cursor-default disabled:opacity-85`}
+            } disabled:opacity-80`}
           >
             <div className="flex items-center gap-2">
               <Check className="w-6 h-6 stroke-[3]" />
@@ -224,15 +270,17 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
 
           <button
             type="button"
-            disabled={isAnswered}
+            disabled={isButtonsLocked || questionStage === 'results'}
             onClick={() => handleSelectChoice('remainder')}
             className={`py-5 px-4 rounded-2xl font-display font-black text-lg sm:text-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 btn-press ${
-              isAnswered && userChoice === 'remainder'
+              questionStage === 'results' && userChoice === 'remainder'
                 ? !currentQ.isExact
                   ? 'bg-[#E2463B] text-white shadow-[0_4px_0_#A81D14] scale-102 ring-4 ring-red-300'
                   : 'bg-slate-400 text-white shadow-[0_4px_0_#64748b]'
+                : isButtonsLocked
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                 : 'bg-[#E2463B] hover:bg-[#c93329] text-white shadow-[0_6px_0_#A81D14] active:translate-y-1 active:shadow-none'
-            } disabled:cursor-default disabled:opacity-85`}
+            } disabled:opacity-80`}
           >
             <div className="flex items-center gap-2">
               <span className="text-xl">◐</span>
@@ -242,10 +290,10 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
           </button>
         </div>
 
-        {/* HỘP PHẢN HỒI KHI ĐÃ TRẢ LỜI */}
-        {isAnswered && (
+        {/* BƯỚC ③: HỘP PHẢN HỒI KÈM Ô GHI SỐ BẠN TRẢ LỜI ĐÚNG */}
+        {questionStage === 'results' && (
           <div
-            className={`w-full max-w-lg p-4 sm:p-5 rounded-2xl border-2 transition-all animate-fadeIn ${
+            className={`w-full max-w-lg p-4 sm:p-5 rounded-2xl border-2 transition-all space-y-3 animate-fadeIn ${
               isCurrentCorrect
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                 : 'bg-red-50 border-red-300 text-red-950'
@@ -263,8 +311,7 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
                 {isCurrentCorrect ? (
                   <>
                     <p className="text-emerald-800 text-sm sm:text-base font-extrabold">
-                      🎉 Đúng rồi! +1 điểm cho{' '}
-                      {currentTeam === 'blue' ? 'Đội Xanh' : 'Đội Cam'}!
+                      🎉 Đúng rồi! +1 điểm cho {activeGroup.name}!
                     </p>
                     <p className="text-slate-800">
                       {currentQ.dividend} : {currentQ.divisor} ={' '}
@@ -297,7 +344,7 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
                 ) : (
                   <>
                     <p className="text-red-700 text-sm sm:text-base font-extrabold">
-                      Chưa đúng rồi, cố lên nhé!
+                      Chưa đúng rồi, cùng xem lại nhé!
                     </p>
                     <p className="text-slate-800">
                       {currentQ.dividend} : {currentQ.divisor} ={' '}
@@ -335,8 +382,15 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
               </div>
             </div>
 
+            {/* Ô KIỂM ĐẾM SỐ BẠN DƯỚI LỚP TRẢ LỜI ĐÚNG */}
+            <ClassCorrectCounter
+              classSize={classSize}
+              correctCount={classCorrectCount}
+              onChange={setClassCorrectCount}
+            />
+
             {/* Nút Câu tiếp theo */}
-            <div className="mt-4 pt-3 border-t border-slate-200/60 flex justify-end">
+            <div className="pt-2 border-t border-slate-200/60 flex justify-end">
               <button
                 type="button"
                 onClick={handleNextQuestion}

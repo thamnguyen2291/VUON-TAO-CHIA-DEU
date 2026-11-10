@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Check, X, ArrowRight, Delete, AlertTriangle, Sparkles, BookOpen } from 'lucide-react';
-import { Team } from './Header.tsx';
 import { sound } from '../utils/audio.ts';
 import { TabId } from './TabNav.tsx';
+import { GroupInfo } from '../types/classroom.ts';
+import { QuestionStepBanner, QuestionStage } from './classroom/QuestionStepBanner.tsx';
+import { ClassCorrectCounter } from './classroom/ClassCorrectCounter.tsx';
+import { StudentCaller } from './classroom/StudentCaller.tsx';
 
 export interface ChallengeItem {
   id: number;
@@ -93,39 +96,64 @@ export const CHALLENGE_QUESTIONS: ChallengeItem[] = [
 ];
 
 interface ChallengeTabProps {
-  currentTeam: Team;
-  onScoreTeam: (team: Team, points: number) => void;
-  onNextTeam: () => void;
+  groups: GroupInfo[];
+  activeGroupId: string;
+  onScoreGroup: (groupId: string, points: number) => void;
+  onNextGroup: () => void;
   onGoToTab: (tab: TabId) => void;
   onTriggerConfetti: () => void;
-  onRecordAnswer: (stage: string, questionText: string, isCorrect: boolean) => void;
+  onRecordAnswer: (stage: string, questionText: string, isCorrect: boolean, classCorrect?: number, classSize?: number) => void;
+  classSize?: number;
+  enableCountdown?: boolean;
+  countdownDuration?: 5 | 10 | 15;
+  calledStudents?: number[];
+  onCallStudent?: (num: number) => void;
+  onSkipStudent?: (num: number) => void;
 }
 
 export const ChallengeTab: React.FC<ChallengeTabProps> = ({
-  currentTeam,
-  onScoreTeam,
-  onNextTeam,
+  groups,
+  activeGroupId,
+  onScoreGroup,
+  onNextGroup,
   onGoToTab,
   onTriggerConfetti,
   onRecordAnswer,
+  classSize = 35,
+  enableCountdown = true,
+  countdownDuration = 10,
+  calledStudents = [],
+  onCallStudent = () => {},
+  onSkipStudent = () => {},
 }) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [inputQuotient, setInputQuotient] = useState<string>('');
   const [inputRemainder, setInputRemainder] = useState<string>('');
   const [activeInputBox, setActiveInputBox] = useState<'q' | 'r'>('q');
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
-  const [isAnswered, setIsAnswered] = useState<boolean>(false);
   const [results, setResults] = useState<(boolean | null)[]>(new Array(6).fill(null));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 3 bước câu hỏi: 'countdown' | 'answering' | 'results'
+  const [questionStage, setQuestionStage] = useState<QuestionStage>(
+    enableCountdown ? 'countdown' : 'answering'
+  );
+  const [classCorrectCount, setClassCorrectCount] = useState<number>(classSize);
 
   const quotientRef = useRef<HTMLInputElement | null>(null);
   const remainderRef = useRef<HTMLInputElement | null>(null);
 
+  const activeGroup = useMemo(
+    () => groups.find((g) => g.id === activeGroupId) || groups[0],
+    [groups, activeGroupId]
+  );
+
   const currentQ = CHALLENGE_QUESTIONS[currentIndex];
+  const isButtonsLocked = questionStage === 'countdown';
 
   // Xử lý nộp câu hỏi dạng nhập số
   const handleAnswerInput = useCallback(() => {
-    if (isAnswered) return;
+    if (questionStage !== 'answering') return;
     setErrorMessage(null);
 
     if (inputQuotient.trim() === '' || inputRemainder.trim() === '') {
@@ -147,51 +175,46 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
     const isCorrect =
       qVal === currentQ.correctQuotient && rVal === currentQ.correctRemainder;
 
-    setIsAnswered(true);
+    setQuestionStage('results');
     const newResults = [...results];
     newResults[currentIndex] = isCorrect;
     setResults(newResults);
 
-    onRecordAnswer('Chặng 3: Thử thách', currentQ.question, isCorrect);
-
     if (isCorrect) {
       sound.playCorrect();
       onTriggerConfetti();
-      onScoreTeam(currentTeam, 1);
+      onScoreGroup(activeGroup.id, 1);
     } else {
       sound.playIncorrect();
     }
   }, [
-    isAnswered,
+    questionStage,
     inputQuotient,
     inputRemainder,
     currentQ,
     results,
     currentIndex,
-    currentTeam,
-    onRecordAnswer,
+    activeGroup.id,
     onTriggerConfetti,
-    onScoreTeam,
+    onScoreGroup,
   ]);
 
   // Xử lý nộp câu hỏi dạng chọn
   const handleSelectChoice = (optionIndex: number) => {
-    if (isAnswered) return;
+    if (questionStage !== 'answering') return;
     setErrorMessage(null);
     setSelectedChoice(optionIndex);
-    setIsAnswered(true);
+    setQuestionStage('results');
 
     const isCorrect = optionIndex === currentQ.correctOptionIndex;
     const newResults = [...results];
     newResults[currentIndex] = isCorrect;
     setResults(newResults);
 
-    onRecordAnswer('Chặng 3: Thử thách', currentQ.question, isCorrect);
-
     if (isCorrect) {
       sound.playCorrect();
       onTriggerConfetti();
-      onScoreTeam(currentTeam, 1);
+      onScoreGroup(activeGroup.id, 1);
     } else {
       sound.playIncorrect();
     }
@@ -199,7 +222,7 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
 
   // Bàn phím số trên màn hình
   const handleKeypadPress = (key: string) => {
-    if (isAnswered) return;
+    if (questionStage !== 'answering') return;
     sound.playClick();
     setErrorMessage(null);
 
@@ -221,7 +244,6 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
         if (inputQuotient.length < 2) {
           const newVal = inputQuotient + key;
           setInputQuotient(newVal);
-          // Tự chuyển focus sang ô số dư nếu đã nhập thương (hầu hết thương lớp 3 là 1 chữ số, ví dụ 5, 4, 6)
           if (newVal.length >= 1) {
             setTimeout(() => setActiveInputBox('r'), 80);
           }
@@ -234,10 +256,10 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
     }
   };
 
-  // Hỗ trợ phím cứng bàn phím máy tính
+  // Hỗ trợ phím cứng máy tính
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isAnswered) {
+      if (questionStage === 'results') {
         if (e.key === 'Enter') {
           handleNextQuestion();
         }
@@ -255,29 +277,34 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAnswered, currentQ.type, handleAnswerInput]);
+  }, [questionStage, currentQ.type, handleAnswerInput]);
 
   const handleNextQuestion = () => {
     sound.playClick();
+    const isCorrect = results[currentIndex] === true;
+
+    // Ghi nhận cả kết quả đại diện và số bạn dưới lớp đúng
+    onRecordAnswer('Chặng 3: Thử thách', currentQ.question, isCorrect, classCorrectCount, classSize);
+
     if (currentIndex < CHALLENGE_QUESTIONS.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setInputQuotient('');
       setInputRemainder('');
       setActiveInputBox('q');
       setSelectedChoice(null);
-      setIsAnswered(false);
       setErrorMessage(null);
-      onNextTeam(); // Tự đổi lượt
+      setQuestionStage(enableCountdown ? 'countdown' : 'answering');
+      setClassCorrectCount(classSize);
+      onNextGroup(); // Tự đổi lượt sang nhóm tiếp theo (vòng tròn)
     } else {
-      // Sang tab Tổng kết
       onGoToTab('summary');
     }
   };
 
-  const isCurrentCorrect = results[currentIndex];
+  const isCurrentCorrect = results[currentIndex] === true;
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 flex flex-col gap-5 items-center">
+    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 flex flex-col gap-4 items-center">
       {/* TIẾN TRÌNH 6 CÂU */}
       <div className="w-full bg-white rounded-2xl p-4 border-2 border-[#F0DCC0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -314,25 +341,40 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
         </div>
       </div>
 
+      {/* DẢI 3 BƯỚC: ① CẢ LỚP TRẢ LỜI ➔ ② ĐẠI DIỆN LÊN BẤM ➔ ③ XEM KẾT QUẢ */}
+      <QuestionStepBanner
+        stage={questionStage}
+        enableCountdown={enableCountdown}
+        countdownSeconds={countdownDuration}
+        onCountdownFinish={() => setQuestionStage('answering')}
+        onSkipCountdown={() => setQuestionStage('answering')}
+      />
+
       {/* THẺ BÀI THỬ THÁCH */}
-      <div className="w-full bg-white rounded-3xl p-6 sm:p-8 border-2 border-[#F0DCC0] shadow-md flex flex-col items-center gap-6">
-        {/* Nhãn lượt đội */}
-        <div
-          className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-display font-black text-sm sm:text-base border-2 shadow-xs transition-all ${
-            currentTeam === 'blue'
-              ? 'bg-blue-50 border-[#2F80D0] text-[#2F80D0]'
-              : 'bg-orange-50 border-[#F07B12] text-[#F07B12]'
-          }`}
-        >
-          <span
-            className={`w-3 h-3 rounded-full ${
-              currentTeam === 'blue' ? 'bg-[#2F80D0]' : 'bg-[#F07B12]'
-            }`}
+      <div className="w-full bg-white rounded-3xl p-5 sm:p-7 border-2 border-[#F0DCC0] shadow-md flex flex-col items-center gap-5">
+        {/* Nhãn lượt đội + Nút chọn bạn lên bấm */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full font-display font-black text-sm sm:text-base border-2 shadow-xs transition-all bg-white"
+            style={{
+              borderColor: activeGroup.colorHex,
+              color: activeGroup.colorHex,
+            }}
+          >
+            <span
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: activeGroup.colorHex }}
+            />
+            <span>Lượt của {activeGroup.name}</span>
+            <Sparkles className="w-4 h-4" />
+          </div>
+
+          <StudentCaller
+            classSize={classSize}
+            calledStudents={calledStudents}
+            onCallStudent={onCallStudent}
+            onSkipStudent={onSkipStudent}
           />
-          <span>
-            Lượt của {currentTeam === 'blue' ? 'Đội Xanh' : 'Đội Cam'}
-          </span>
-          <Sparkles className="w-4 h-4" />
         </div>
 
         {/* ĐỀ BÀI TO RÕ */}
@@ -354,14 +396,14 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
               {/* Ô Thương (Màu Xanh Dương) */}
               <button
                 type="button"
-                disabled={isAnswered}
+                disabled={isButtonsLocked || questionStage === 'results'}
                 onClick={() => {
                   sound.playClick();
                   setActiveInputBox('q');
                   quotientRef.current?.focus();
                 }}
                 className={`w-16 h-14 sm:w-20 sm:h-16 rounded-2xl border-3 flex items-center justify-center font-display font-black text-2xl sm:text-3xl transition-all cursor-pointer ${
-                  activeInputBox === 'q' && !isAnswered
+                  activeInputBox === 'q' && questionStage === 'answering'
                     ? 'border-[#2F80D0] bg-blue-100/90 ring-4 ring-blue-300 text-[#2F80D0] scale-105'
                     : 'border-[#2F80D0]/50 bg-blue-50 text-[#2F80D0]'
                 }`}
@@ -376,14 +418,14 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
               {/* Ô Số Dư (Màu Đỏ) */}
               <button
                 type="button"
-                disabled={isAnswered}
+                disabled={isButtonsLocked || questionStage === 'results'}
                 onClick={() => {
                   sound.playClick();
                   setActiveInputBox('r');
                   remainderRef.current?.focus();
                 }}
                 className={`w-16 h-14 sm:w-20 sm:h-16 rounded-2xl border-3 flex items-center justify-center font-display font-black text-2xl sm:text-3xl transition-all cursor-pointer ${
-                  activeInputBox === 'r' && !isAnswered
+                  activeInputBox === 'r' && questionStage === 'answering'
                     ? 'border-[#E2463B] bg-red-100/90 ring-4 ring-red-300 text-[#E2463B] scale-105'
                     : 'border-[#E2463B]/50 bg-red-50 text-[#E2463B]'
                 }`}
@@ -410,7 +452,7 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
             </div>
 
             {/* BÀN PHÍM SỐ TRÊN MÀN HÌNH (0-9, ⌫, Trả lời) */}
-            {!isAnswered && (
+            {questionStage === 'answering' && (
               <div className="w-full max-w-sm mt-1 bg-amber-100/70 p-3 rounded-2xl border-2 border-amber-200">
                 <div className="grid grid-cols-3 gap-2">
                   {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
@@ -424,7 +466,6 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
                     </button>
                   ))}
 
-                  {/* Nút 0 */}
                   <button
                     type="button"
                     onClick={() => handleKeypadPress('0')}
@@ -433,7 +474,6 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
                     0
                   </button>
 
-                  {/* Nút Xóa (⌫) */}
                   <button
                     type="button"
                     onClick={() => handleKeypadPress('backspace')}
@@ -443,7 +483,6 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
                     <Delete className="w-5 h-5" />
                   </button>
 
-                  {/* Nút Trả Lời */}
                   <button
                     type="button"
                     onClick={handleAnswerInput}
@@ -467,15 +506,17 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
                 <button
                   key={idx}
                   type="button"
-                  disabled={isAnswered}
+                  disabled={isButtonsLocked || questionStage === 'results'}
                   onClick={() => handleSelectChoice(idx)}
                   className={`w-full py-4 px-5 rounded-2xl font-display font-bold text-lg sm:text-xl transition-all cursor-pointer flex items-center justify-between border-2 btn-press ${
-                    isAnswered
+                    questionStage === 'results'
                       ? isOptionCorrect
                         ? 'bg-emerald-100 border-[#3F9B4A] text-emerald-950 font-black ring-4 ring-emerald-300'
                         : isSelected
                         ? 'bg-red-100 border-[#E2463B] text-red-950 ring-4 ring-red-300'
                         : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                      : isButtonsLocked
+                      ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
                       : 'bg-white hover:bg-amber-50/70 border-amber-300 text-slate-800 shadow-sm hover:shadow-md'
                   }`}
                 >
@@ -485,10 +526,10 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
                     </span>
                     <span>{opt}</span>
                   </div>
-                  {isAnswered && isOptionCorrect && (
+                  {questionStage === 'results' && isOptionCorrect && (
                     <Check className="w-6 h-6 text-[#3F9B4A] stroke-[3]" />
                   )}
-                  {isAnswered && isSelected && !isOptionCorrect && (
+                  {questionStage === 'results' && isSelected && !isOptionCorrect && (
                     <X className="w-6 h-6 text-[#E2463B] stroke-[3]" />
                   )}
                 </button>
@@ -497,7 +538,7 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
           </div>
         )}
 
-        {/* CẢNH BÁO / NHẮC NHỞ KHI NHẬP THIẾU HOẶC SỐ DƯ QUÁ LỚN */}
+        {/* CẢNH BÁO KHI NHẬP THIẾU */}
         {errorMessage && (
           <div className="w-full max-w-lg bg-amber-100 border-2 border-amber-300 text-amber-950 p-3 rounded-xl flex items-center gap-2.5 text-xs sm:text-sm font-bold animate-fadeIn">
             <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
@@ -505,10 +546,10 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
           </div>
         )}
 
-        {/* HỘP LỜI GIẢI VÀ THỬ LẠI SAU KHI TRẢ LỜI */}
-        {isAnswered && (
+        {/* BƯỚC ③: HỘP LỜI GIẢI VÀ Ô KIỂM ĐẾM SỐ BẠN DƯỚI LỚP TRẢ LỜI ĐÚNG */}
+        {questionStage === 'results' && (
           <div
-            className={`w-full max-w-xl p-5 rounded-2xl border-2 transition-all animate-fadeIn ${
+            className={`w-full max-w-xl p-5 rounded-2xl border-2 transition-all space-y-3 animate-fadeIn ${
               isCurrentCorrect
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                 : 'bg-red-50 border-red-300 text-red-950'
@@ -525,9 +566,7 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
               <div className="space-y-2 text-xs sm:text-sm font-bold flex-1">
                 <p className="text-sm sm:text-base font-extrabold">
                   {isCurrentCorrect
-                    ? `🎉 Rất giỏi! +1 điểm cho ${
-                        currentTeam === 'blue' ? 'Đội Xanh' : 'Đội Cam'
-                      }!`
+                    ? `🎉 Rất giỏi! +1 điểm cho ${activeGroup.name}!`
                     : 'Chưa chính xác, cùng xem giải thích nhé:'}
                 </p>
 
@@ -552,8 +591,15 @@ export const ChallengeTab: React.FC<ChallengeTabProps> = ({
               </div>
             </div>
 
+            {/* Ô KIỂM ĐẾM SỐ BẠN DƯỚI LỚP TRẢ LỜI ĐÚNG */}
+            <ClassCorrectCounter
+              classSize={classSize}
+              correctCount={classCorrectCount}
+              onChange={setClassCorrectCount}
+            />
+
             {/* Nút sang câu tiếp */}
-            <div className="mt-4 pt-3 border-t border-slate-200/60 flex justify-end">
+            <div className="pt-2 border-t border-slate-200/60 flex justify-end">
               <button
                 type="button"
                 onClick={handleNextQuestion}

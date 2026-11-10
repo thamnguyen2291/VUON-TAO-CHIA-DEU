@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Header, Team } from './components/Header.tsx';
+import { Header } from './components/Header.tsx';
 import { TabNav, TabId } from './components/TabNav.tsx';
 import { ExploreTab } from './components/ExploreTab.tsx';
 import { PracticeTab, generatePracticeQuestions } from './components/PracticeTab.tsx';
@@ -10,16 +10,24 @@ import { Footer } from './components/Footer.tsx';
 import { Confetti } from './components/Confetti.tsx';
 import { ModeSelection } from './components/ModeSelection.tsx';
 import { SelfPacedContainer } from './components/self_paced/SelfPacedContainer.tsx';
+import { ClassroomSetup } from './components/classroom/ClassroomSetup.tsx';
+import { PrintCardsModal } from './components/classroom/PrintCardsModal.tsx';
+import {
+  ClassroomConfig,
+  GroupInfo,
+  DEFAULT_CLASSROOM_CONFIG,
+  createInitialGroups,
+} from './types/classroom.ts';
 import { sound } from './utils/audio.ts';
 
-export type AppMode = 'select' | 'classroom' | 'self-paced';
+export type AppMode = 'select' | 'classroom-setup' | 'classroom' | 'self-paced';
 
 export default function App() {
-  // Quản lý chế độ hiển thị: Chọn chế độ | Trên lớp | Em tự học
+  // Quản lý chế độ hiển thị: Chọn chế độ | Thiết lập lớp học | Trên lớp | Em tự học
   const [appMode, setAppMode] = useState<AppMode>('select');
   const [selfPacedResumeStep, setSelfPacedResumeStep] = useState<number>(0);
 
-  // Đọc tiến độ đã lưu từ localStorage
+  // Đọc tiến độ đã lưu từ localStorage cho chế độ Em tự học
   const [savedStep, setSavedStep] = useState<number | null>(null);
   const [savedScore, setSavedScore] = useState<number | null>(null);
 
@@ -48,7 +56,20 @@ export default function App() {
     }
   };
 
-  // =================== TRẠNG THÁI CHẾ ĐỘ TRÊN LỚP (GIỮ NGUYÊN 100%) ===================
+  // =================== TRẠNG THÁI CHẾ ĐỘ TRÊN LỚP NÂNG CẤP ===================
+  // Cấu hình tiết học (2 đội hoặc 3–6 nhóm, sĩ số 10–45, đếm ngược bật/tắt)
+  const [classroomConfig, setClassroomConfig] = useState<ClassroomConfig>(DEFAULT_CLASSROOM_CONFIG);
+
+  // Danh sách các nhóm thi đua với màu sắc và điểm số
+  const [groups, setGroups] = useState<GroupInfo[]>(() =>
+    createInitialGroups(DEFAULT_CLASSROOM_CONFIG.groupFormat)
+  );
+  const [activeGroupIndex, setActiveGroupIndex] = useState<number>(0);
+  const activeGroupId = groups[activeGroupIndex]?.id || groups[0]?.id || 'group-1';
+
+  // Danh sách học sinh đã được gọi lên bảng (số thứ tự 1..classSize)
+  const [calledStudents, setCalledStudents] = useState<number[]>([]);
+
   // Quản lý tab hiện tại trong chế độ Trên lớp
   const [currentTab, setCurrentTab] = useState<TabId>('explore');
 
@@ -56,22 +77,18 @@ export default function App() {
   const [timeRemaining, setTimeRemaining] = useState<number>(600);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
 
-  // Quản lý điểm số 2 đội
-  const [scoreBlue, setScoreBlue] = useState<number>(0);
-  const [scoreOrange, setScoreOrange] = useState<number>(0);
-  const [currentTeam, setCurrentTeam] = useState<Team>('blue');
-
   // Quản lý âm thanh
   const [isSoundOn, setIsSoundOn] = useState<boolean>(true);
 
-  // Quản lý hộp thoại hướng dẫn
+  // Quản lý hộp thoại hướng dẫn & in thẻ trả lời
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isPrintCardsOpen, setIsPrintCardsOpen] = useState<boolean>(false);
 
   // Hiệu ứng pháo giấy
   const [confettiActive, setConfettiActive] = useState<boolean>(false);
   const confettiTimeoutRef = useRef<number | null>(null);
 
-  // Nhật ký trả lời của học sinh cho bảng thống kê giáo viên
+  // Nhật ký trả lời của học sinh cho bảng thống kê giáo viên (kèm tỉ lệ cả lớp)
   const [answerRecords, setAnswerRecords] = useState<AnswerRecord[]>([]);
 
   // Bộ câu hỏi chặng 2 (lấy 4 chia hết, 4 có dư xáo trộn)
@@ -119,32 +136,77 @@ export default function App() {
     }
   };
 
-  // Đổi lượt sang đội còn lại
-  const handleNextTeam = () => {
-    setCurrentTeam((prev) => (prev === 'blue' ? 'orange' : 'blue'));
-  };
-
-  // Cộng điểm cho đội
-  const handleScoreTeam = (team: Team, points: number) => {
-    if (team === 'blue') {
-      setScoreBlue((prev) => prev + points);
-    } else {
-      setScoreOrange((prev) => prev + points);
+  // Chọn nhóm theo ID khi giáo viên bấm trực tiếp vào thẻ nhóm
+  const handleSelectGroup = (groupId: string) => {
+    const idx = groups.findIndex((g) => g.id === groupId);
+    if (idx !== -1) {
+      setActiveGroupIndex(idx);
     }
   };
 
-  // Lưu lịch sử câu trả lời
-  const handleRecordAnswer = (stage: string, questionText: string, isCorrect: boolean) => {
-    setAnswerRecords((prev) => [...prev, { stage, questionText, isCorrect }]);
+  // Đổi lượt sang nhóm kế tiếp theo vòng tròn: 1 -> 2 -> ... -> N -> 1
+  const handleNextGroup = () => {
+    setActiveGroupIndex((prev) => (prev + 1) % groups.length);
+  };
+
+  // Cộng điểm cho nhóm theo ID
+  const handleScoreGroup = (groupId: string, points: number) => {
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, score: g.score + points } : g))
+    );
+  };
+
+  // Ghi nhận học sinh đã được gọi
+  const handleCallStudent = (num: number) => {
+    setCalledStudents((prev) => (prev.includes(num) ? prev : [...prev, num]));
+  };
+
+  // Bỏ qua / xóa bạn vắng khỏi danh sách đã gọi
+  const handleSkipStudent = (num: number) => {
+    setCalledStudents((prev) => prev.filter((n) => n !== num));
+  };
+
+  // Lưu lịch sử câu trả lời kèm số bạn đúng của cả lớp
+  const handleRecordAnswer = (
+    stage: string,
+    questionText: string,
+    isCorrect: boolean,
+    classCorrect?: number,
+    classSize?: number
+  ) => {
+    setAnswerRecords((prev) => [
+      ...prev,
+      {
+        stage,
+        questionText,
+        isCorrect,
+        classCorrect,
+        classSize: classSize || classroomConfig.classSize,
+      },
+    ]);
+  };
+
+  // Bắt đầu tiết học từ màn hình thiết lập
+  const handleStartClassroom = (config: ClassroomConfig) => {
+    setClassroomConfig(config);
+    setGroups(createInitialGroups(config.groupFormat));
+    setActiveGroupIndex(0);
+    setCalledStudents([]);
+    setAnswerRecords([]);
+    setTimeRemaining(600);
+    setIsTimerRunning(false);
+    setPracticeQuestions(generatePracticeQuestions());
+    setCurrentTab('explore');
+    setAppMode('classroom');
   };
 
   // Chơi lại từ đầu (chế độ Trên lớp)
   const handleResetAll = () => {
     setTimeRemaining(600);
     setIsTimerRunning(false);
-    setScoreBlue(0);
-    setScoreOrange(0);
-    setCurrentTeam('blue');
+    setGroups(createInitialGroups(classroomConfig.groupFormat));
+    setActiveGroupIndex(0);
+    setCalledStudents([]);
     setAnswerRecords([]);
     setPracticeQuestions(generatePracticeQuestions());
     setCurrentTab('explore');
@@ -155,7 +217,8 @@ export default function App() {
       setSelfPacedResumeStep(resumeStep ?? 0);
       setAppMode('self-paced');
     } else {
-      setAppMode('classroom');
+      // Vào màn hình thiết lập trước khi bắt đầu tiết học
+      setAppMode('classroom-setup');
     }
   };
 
@@ -174,7 +237,17 @@ export default function App() {
         />
       )}
 
-      {/* 2. CHẾ ĐỘ EM TỰ HỌC (E-LEARNING) */}
+      {/* 2. MÀN HÌNH THIẾT LẬP TIẾT HỌC TRÊN LỚP */}
+      {appMode === 'classroom-setup' && (
+        <ClassroomSetup
+          initialConfig={classroomConfig}
+          onStart={handleStartClassroom}
+          onBackToModeSelect={() => setAppMode('select')}
+          onOpenPrintCards={() => setIsPrintCardsOpen(true)}
+        />
+      )}
+
+      {/* 3. CHẾ ĐỘ EM TỰ HỌC (E-LEARNING) - GIỮ NGUYÊN 100% */}
       {appMode === 'self-paced' && (
         <SelfPacedContainer
           onBackToModeSelect={() => setAppMode('select')}
@@ -183,10 +256,10 @@ export default function App() {
         />
       )}
 
-      {/* 3. CHẾ ĐỘ TRÊN LỚP (GIỮ NGUYÊN HOÀN TOÀN CÁC CHỨC NĂNG) */}
+      {/* 4. CHẾ ĐỘ TRÊN LỚP NÂNG CẤP (CẢ LỚP CÙNG THAM GIA) */}
       {appMode === 'classroom' && (
         <>
-          {/* Thanh đầu trang luôn cố định */}
+          {/* Thanh đầu trang với bảng điểm nhiều nhóm (2–6 nhóm) */}
           <Header
             timeRemaining={timeRemaining}
             isTimerRunning={isTimerRunning}
@@ -195,13 +268,13 @@ export default function App() {
               setTimeRemaining(600);
               setIsTimerRunning(false);
             }}
-            scoreBlue={scoreBlue}
-            scoreOrange={scoreOrange}
-            currentTeam={currentTeam}
-            onSelectTeam={(team) => setCurrentTeam(team)}
+            groups={groups}
+            activeGroupId={activeGroupId}
+            onSelectGroup={handleSelectGroup}
             isSoundOn={isSoundOn}
             onToggleSound={toggleSound}
             onOpenHelp={() => setIsHelpOpen(true)}
+            onOpenSetup={() => setAppMode('classroom-setup')}
             onBackToModeSelect={() => setAppMode('select')}
           />
 
@@ -210,37 +283,59 @@ export default function App() {
 
           {/* Khu vực nội dung chính theo từng Tab */}
           <main className="flex-1 pb-8">
-            {currentTab === 'explore' && <ExploreTab />}
+            {currentTab === 'explore' && (
+              <ExploreTab
+                classSize={classroomConfig.classSize}
+                calledStudents={calledStudents}
+                onCallStudent={handleCallStudent}
+                onSkipStudent={handleSkipStudent}
+              />
+            )}
 
             {currentTab === 'practice' && (
               <PracticeTab
-                currentTeam={currentTeam}
-                onScoreTeam={handleScoreTeam}
-                onNextTeam={handleNextTeam}
+                groups={groups}
+                activeGroupId={activeGroupId}
+                onScoreGroup={handleScoreGroup}
+                onNextGroup={handleNextGroup}
                 onGoToTab={(tab) => setCurrentTab(tab)}
                 onTriggerConfetti={triggerConfetti}
                 onRecordAnswer={handleRecordAnswer}
                 questions={practiceQuestions}
                 onResetQuestions={() => setPracticeQuestions(generatePracticeQuestions())}
+                classSize={classroomConfig.classSize}
+                enableCountdown={classroomConfig.enableCountdown}
+                countdownDuration={classroomConfig.countdownDuration}
+                calledStudents={calledStudents}
+                onCallStudent={handleCallStudent}
+                onSkipStudent={handleSkipStudent}
               />
             )}
 
             {currentTab === 'challenge' && (
               <ChallengeTab
-                currentTeam={currentTeam}
-                onScoreTeam={handleScoreTeam}
-                onNextTeam={handleNextTeam}
+                groups={groups}
+                activeGroupId={activeGroupId}
+                onScoreGroup={handleScoreGroup}
+                onNextGroup={handleNextGroup}
                 onGoToTab={(tab) => setCurrentTab(tab)}
                 onTriggerConfetti={triggerConfetti}
                 onRecordAnswer={handleRecordAnswer}
+                classSize={classroomConfig.classSize}
+                enableCountdown={classroomConfig.enableCountdown}
+                countdownDuration={classroomConfig.countdownDuration}
+                calledStudents={calledStudents}
+                onCallStudent={handleCallStudent}
+                onSkipStudent={handleSkipStudent}
               />
             )}
 
             {currentTab === 'summary' && (
               <SummaryTab
-                scoreBlue={scoreBlue}
-                scoreOrange={scoreOrange}
+                groups={groups}
                 answerRecords={answerRecords}
+                classSize={classroomConfig.classSize}
+                calledCount={calledStudents.length}
                 onResetAll={handleResetAll}
                 onTriggerConfetti={triggerConfetti}
               />
@@ -250,10 +345,20 @@ export default function App() {
           {/* Chân trang thông tin cuộc thi & giáo viên */}
           <Footer />
 
-          {/* Hộp thoại hướng dẫn sử dụng 10 phút */}
-          <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+          {/* Hộp thoại hướng dẫn sử dụng & in thẻ */}
+          <HelpModal
+            isOpen={isHelpOpen}
+            onClose={() => setIsHelpOpen(false)}
+            onOpenPrintCards={() => setIsPrintCardsOpen(true)}
+          />
         </>
       )}
+
+      {/* Hộp thoại in thẻ trả lời A4 */}
+      <PrintCardsModal
+        isOpen={isPrintCardsOpen}
+        onClose={() => setIsPrintCardsOpen(false)}
+      />
     </div>
   );
 }

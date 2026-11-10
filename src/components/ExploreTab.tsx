@@ -3,6 +3,7 @@ import { AppleSvg } from './AppleSvg.tsx';
 import { BasketSvg } from './BasketSvg.tsx';
 import { sound } from '../utils/audio.ts';
 import { Plus, Minus, RotateCcw, ArrowRight, Lightbulb, CheckCircle2, AlertCircle } from 'lucide-react';
+import { StudentCaller } from './classroom/StudentCaller.tsx';
 
 export interface DivisionHistory {
   id: string;
@@ -13,7 +14,19 @@ export interface DivisionHistory {
   formula: string;
 }
 
-export const ExploreTab: React.FC = () => {
+interface ExploreTabProps {
+  classSize?: number;
+  calledStudents?: number[];
+  onCallStudent?: (num: number) => void;
+  onSkipStudent?: (num: number) => void;
+}
+
+export const ExploreTab: React.FC<ExploreTabProps> = ({
+  classSize = 35,
+  calledStudents = [],
+  onCallStudent = () => {},
+  onSkipStudent = () => {},
+}) => {
   // Bảng điều khiển: số táo và số giỏ
   const [totalApples, setTotalApples] = useState<number>(17);
   const [basketCount, setBasketCount] = useState<number>(5);
@@ -158,7 +171,24 @@ export const ExploreTab: React.FC = () => {
   const isDivideExact = remainder === 0;
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+      {/* Dải nhiệm vụ phụ cho cả lớp */}
+      <div className="bg-emerald-50 border-2 border-emerald-300 p-3 sm:p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl">🌿</span>
+          <p className="text-xs sm:text-sm font-bold text-emerald-950">
+            <strong>Nhiệm vụ cả lớp:</strong> Các bạn dưới lớp cùng chia bằng que tính hoặc hạt, rồi so sánh với kết quả trên màn hình.
+          </p>
+        </div>
+
+        <StudentCaller
+          classSize={classSize}
+          calledStudents={calledStudents}
+          onCallStudent={onCallStudent}
+          onSkipStudent={onSkipStudent}
+        />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* CỘT TRÁI (4 cols): BẢNG ĐIỀU KHIỂN */}
         <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border-2 border-[#F0DCC0] shadow-sm flex flex-col gap-4">
