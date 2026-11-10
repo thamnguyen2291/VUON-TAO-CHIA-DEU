@@ -1,0 +1,57 @@
+HƯỚNG DẪN THU ÂM VÀ ĐẶT FILE GIỌNG ĐỌC VÀO THƯ MỤC NÀY
+===========================================================
+Ứng dụng: "Vườn Táo Chia Đều" - Chế độ "Em Tự Học" (E-learning)
+Bài học: Bài 25 - Phép chia hết, phép chia có dư (Toán 3, Kết nối tri thức)
+
+Khi giáo viên thu âm file giọng đọc của mình, hãy lưu file định dạng MP3 và đặt vào thư mục này:
+public/audio/<ma-buoc>.mp3
+
+Ứng dụng sẽ tự động kiểm tra:
+- NẾU CÓ file mp3: phát file giọng thật của giáo viên.
+- NẾU CHƯA CÓ: tự động dùng giọng đọc tiếng Việt của trình duyệt (Web Speech API) và hiện phụ đề đầy đủ.
+
+DANH SÁCH MÃ BƯỚC VÀ LỜI THOẠI CẦN THU ÂM:
+-----------------------------------------------------------
+1. Tên file: bia.mp3
+Mã bước: bia
+Lời thoại: "Chào em! Mình là Táo Đỏ. Hôm nay chúng mình cùng học bài Phép chia hết, phép chia có dư. Em bấm Bắt đầu học nhé!"
+
+2. Tên file: khoi-dong.mp3
+Mã bước: khoi-dong
+Lời thoại: "Trước khi vào bài mới, em hãy cùng Táo Đỏ ôn lại bảng chia nhé! Em tính nhẩm rồi bấm số trên màn hình nha."
+
+3. Tên file: kham-pha-1.mp3
+Mã bước: kham-pha-1
+Lời thoại: "Bác nông dân có 15 quả táo, chia đều vào 5 giỏ. Em hãy bấm nút để chia, mỗi lượt mỗi giỏ một quả nhé!"
+
+4. Tên file: kham-pha-2.mp3
+Mã bước: kham-pha-2
+Lời thoại: "Bây giờ có 17 quả táo, vẫn chia đều vào 5 giỏ. Em xem lần này có chia hết không nhé!"
+
+5. Tên file: kham-pha-3.mp3
+Mã bước: kham-pha-3
+Lời thoại: "Bây giờ em hãy tự chọn số quả táo để chia vào 4 giỏ nhé! Thử ít nhất 3 lần để xem số quả còn thừa có gì đặc biệt nha."
+
+6. Tên file: ghi-nho.mp3
+Mã bước: ghi-nho
+Lời thoại: "Em hãy đọc thật kỹ và ghi nhớ những kiến thức quan trọng của bài học hôm nay nhé! Đặc biệt: số dư bao giờ cũng bé hơn số chia."
+
+7. Tên file: luyen-tap.mp3
+Mã bước: luyen-tap
+Lời thoại: "Chúng mình cùng sang phần Luyện tập! Em hãy xác định xem phép chia nào là chia hết, phép chia nào có dư và tìm thương cùng số dư nhé."
+
+8. Tên file: van-dung.mp3
+Mã bước: van-dung
+Lời thoại: "Rất tốt! Giờ là lúc em vận dụng kiến thức để giải quyết 3 tình huống thực tế thú vị. Nếu gặp khó, em có thể bấm nút Gợi ý nhé!"
+
+9. Tên file: kiem-tra.mp3
+Mã bước: kiem-tra
+Lời thoại: "Bây giờ em làm bài kiểm tra nhỏ 5 câu nhé. Em làm một mình thật cẩn thận, không có gợi ý đâu nha!"
+
+10. Tên file: tong-ket.mp3
+Mã bước: tong-ket
+Lời thoại: "Chúc mừng em đã hoàn thành xuất sắc bài học hôm nay! Em hãy gõ tên mình để nhận giấy khen và nhớ làm Vở bài tập Toán nhé!"
+
+11. Tên file: tai-lieu.mp3
+Mã bước: tai-lieu
+Lời thoại: "Đây là các tài liệu tham khảo và căn cứ xây dựng bài giảng điện tử này."

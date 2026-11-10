@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, Maximize2, Minimize2, HelpCircle, Play, Pause, RotateCcw } from 'lucide-react';
+import { Volume2, VolumeX, Maximize2, Minimize2, HelpCircle, Play, Pause, RotateCcw, ArrowLeft } from 'lucide-react';
 import { AppleSvg } from './AppleSvg.tsx';
 import { sound } from '../utils/audio.ts';
 
@@ -17,6 +17,7 @@ interface HeaderProps {
   isSoundOn: boolean;
   onToggleSound: () => void;
   onOpenHelp: () => void;
+  onBackToModeSelect?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   isSoundOn,
   onToggleSound,
   onOpenHelp,
+  onBackToModeSelect,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -52,7 +54,21 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="bg-white/95 backdrop-blur-sm border-b-2 border-[#F0DCC0] shadow-sm sticky top-0 z-40 px-3 py-2 md:px-6 md:py-3">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
         {/* Logo và Tiêu đề */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {onBackToModeSelect && (
+            <button
+              type="button"
+              onClick={() => {
+                sound.playClick();
+                onBackToModeSelect();
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-950 font-display font-bold text-xs transition-colors cursor-pointer mr-0.5"
+              title="Quay lại chọn chế độ"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Chọn chế độ</span>
+            </button>
+          )}
           <div className="bg-red-50 p-1.5 rounded-2xl border border-red-200 shadow-sm flex items-center justify-center">
             <AppleSvg size="sm" />
           </div>
