@@ -1,0 +1,6 @@
+{
+  "name": "Vườn Táo Chia Đều - Toán 3 Bài 25",
+  "description": "Ứng dụng dạy học tương tác Toán 3: Bài 25 - Phép chia hết và phép chia có dư. Mô phỏng chia táo trực quan, luyện tập 2 đội thi đua và vận dụng thực tế.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Baloo 2", cursive, sans-serif;
+  --font-sans: "Nunito", sans-serif;
+  --color-garden-bg: #FFF8EC;
+  --color-garden-green: #3F9B4A;
+  --color-garden-green-dark: #2C7535;
+  --color-apple: #E2463B;
+  --color-apple-dark: #B92B21;
+  --color-orange-warm: #F39A1E;
+  --color-sky-blue: #3D8FD6;
+  --color-border-soft: #F0DCC0;
+  --color-team-blue: #2F80D0;
+  --color-team-orange: #F07B12;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #FFF8EC;
+  color: #2D3748;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Custom bounce and pulse keyframes */
+@keyframes appleDrop {
+  0% { transform: translateY(-30px) scale(0.7); opacity: 0; }
+  60% { transform: translateY(6px) scale(1.1); opacity: 1; }
+  80% { transform: translateY(-3px) scale(0.95); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.animate-apple-drop {
+  animation: appleDrop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes appleWiggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-8deg) scale(1.05); }
+  75% { transform: rotate(8deg) scale(1.05); }
+}
+
+.animate-apple-wiggle {
+  animation: appleWiggle 1.4s ease-in-out infinite;
+}
+
+/* 3D button press tactile feel */
+.btn-press {
+  transition: all 0.1s ease;
+}
+.btn-press:active {
+  transform: translateY(2px);
+}
