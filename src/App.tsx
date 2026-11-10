@@ -157,8 +157,12 @@ export default function App() {
   };
 
   // Ghi nhận học sinh đã được gọi
-  const handleCallStudent = (num: number) => {
-    setCalledStudents((prev) => (prev.includes(num) ? prev : [...prev, num]));
+  const handleCallStudent = (num: number, batDauVongMoi: boolean) => {
+    if (batDauVongMoi) {
+      setCalledStudents([num]);
+    } else {
+      setCalledStudents((prev) => (prev.includes(num) ? prev : [...prev, num]));
+    }
   };
 
   // Bỏ qua / xóa bạn vắng khỏi danh sách đã gọi

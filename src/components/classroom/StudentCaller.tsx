@@ -5,7 +5,7 @@ import { sound } from '../../utils/audio.ts';
 interface StudentCallerProps {
   classSize: number;
   calledStudents: number[];
-  onCallStudent: (rollNumber: number) => void;
+  onCallStudent: (rollNumber: number, batDauVongMoi: boolean) => void;
   onSkipStudent: (rollNumber: number) => void;
   className?: string;
 }
@@ -69,15 +69,12 @@ export const StudentCaller: React.FC<StudentCallerProps> = ({
           setJustResetCycle(true);
         }
         sound.playPop();
-        onCallStudent(chosenNumber);
+        onCallStudent(chosenNumber, willReset);
       }
     }, 90);
   };
 
   const handleReroll = () => {
-    if (displayNumber !== null) {
-      onSkipStudent(displayNumber);
-    }
     handleStartRolling();
   };
 

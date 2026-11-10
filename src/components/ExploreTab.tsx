@@ -17,7 +17,7 @@ export interface DivisionHistory {
 interface ExploreTabProps {
   classSize?: number;
   calledStudents?: number[];
-  onCallStudent?: (num: number) => void;
+  onCallStudent?: (num: number, batDauVongMoi: boolean) => void;
   onSkipStudent?: (num: number) => void;
 }
 

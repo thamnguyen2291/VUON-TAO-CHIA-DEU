@@ -107,7 +107,7 @@ interface ChallengeTabProps {
   enableCountdown?: boolean;
   countdownDuration?: 5 | 10 | 15;
   calledStudents?: number[];
-  onCallStudent?: (num: number) => void;
+  onCallStudent?: (num: number, batDauVongMoi: boolean) => void;
   onSkipStudent?: (num: number) => void;
 }
 
